@@ -8,7 +8,6 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { createClient } from "@/lib/supabase/client"
 import Link from "next/link"
 import { Building2 } from "lucide-react"
 
@@ -26,39 +25,36 @@ export default function SignUpForm() {
     setError("")
     setSuccess("")
 
-    const supabase = createClient()
-
     try {
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          emailRedirectTo:
-            process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL || `${window.location.origin}/auth/callback`,
+      const response = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
         },
+        body: JSON.stringify({
+          email,
+          password,
+          fullName,
+          role: "hotel_owner",
+        }),
       })
 
-      if (error) {
-        setError(error.message)
+      const data = await response.json()
+
+      if (!response.ok) {
+        setError(data.error || "Sign up failed")
         return
       }
 
-      if (data.user) {
-        const { error: profileError } = await supabase.from("users").insert({
-          id: data.user.id,
-          email,
-          full_name: fullName,
-          role: "hotel_owner",
-        })
-
-        if (profileError) {
-          setError("Failed to create user profile")
-          return
-        }
-
-        setSuccess("Account created successfully! Please check your email to verify your account.")
+      if (data.success) {
+        setSuccess("Account created successfully! You can now sign in with your credentials.")
+        // Clear form
+        setEmail("")
+        setPassword("")
+        setFullName("")
       }
     } catch (err) {
+      console.error("Sign up error:", err)
       setError("An unexpected error occurred")
     } finally {
       setLoading(false)

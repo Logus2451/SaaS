@@ -1,34 +1,17 @@
-import { createClient } from "@/lib/supabase/server"
-import type { UserProfile, UserRole } from "./roles"
+import { getCurrentUser as getSessionUser } from "./session"
+import { userQueries, hotelQueries } from "@/lib/database/queries"
 import { redirect } from "next/navigation"
+import type { AuthUser } from "./auth"
+
+export type UserRole = "super_admin" | "hotel_owner" | "hotel_staff" | "guest"
+
+export interface UserProfile extends AuthUser {
+  created_at?: Date
+  updated_at?: Date
+}
 
 export async function getCurrentUser(): Promise<UserProfile | null> {
-  const supabase = createClient()
-
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser()
-
-  if (error || !user) {
-    return null
-  }
-
-  // Get user profile with role information
-  const { data: profile } = await supabase.from("users").select("*").eq("id", user.id).single()
-
-  if (!profile) {
-    return null
-  }
-
-  return {
-    id: profile.id,
-    email: profile.email,
-    role: profile.role as UserRole,
-    hotel_id: profile.hotel_id,
-    created_at: profile.created_at,
-    updated_at: profile.updated_at,
-  }
+  return getSessionUser()
 }
 
 export async function requireAuth(): Promise<UserProfile> {
@@ -60,9 +43,16 @@ export async function requireHotelAccess(): Promise<UserProfile> {
 }
 
 export async function getUserHotel(userId: string) {
-  const supabase = createClient()
+  try {
+    const user = await userQueries.findById(userId)
+    if (!user || !user.hotel_id) {
+      return null
+    }
 
-  const { data: user } = await supabase.from("users").select("hotel_id, hotels(*)").eq("id", userId).single()
-
-  return user?.hotels || null
+    const hotel = await hotelQueries.findById(user.hotel_id)
+    return hotel
+  } catch (error) {
+    console.error("Error fetching user hotel:", error)
+    return null
+  }
 }

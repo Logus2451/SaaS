@@ -9,7 +9,6 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { supabase } from "@/lib/supabase/client"
 import Link from "next/link"
 import { Building2 } from "lucide-react"
 
@@ -26,69 +25,36 @@ export default function LoginForm() {
     setError("")
 
     try {
-      console.log("🔐 Attempting login with:", { email, passwordLength: password.length })
-
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email, password }),
       })
 
-      if (error) {
-        console.error("❌ Supabase auth error:", {
-          message: error.message,
-          status: error.status,
-          name: error.name,
-          cause: error.cause,
-        })
+      const data = await response.json()
 
-        if (error.message === "Invalid login credentials") {
-          setError("Invalid email or password. Please check your credentials and try again.")
-        } else if (error.message.includes("Email not confirmed")) {
-          setError("Please confirm your email address before signing in.")
-        } else {
-          setError(`Login failed: ${error.message}`)
-        }
+      if (!response.ok) {
+        setError(data.error || "Login failed")
         return
       }
 
-      if (data.user) {
-        console.log("✅ Auth successful, user:", {
-          id: data.user.id,
-          email: data.user.email,
-          emailConfirmed: data.user.email_confirmed_at,
-          lastSignIn: data.user.last_sign_in_at,
-        })
-
-        // Get user role to redirect appropriately
-        console.log("🔍 Looking up user role in public.users table...")
-        const { data: userData, error: userError } = await supabase
-          .from("users")
-          .select("role, email, full_name")
-          .eq("id", data.user.id)
-          .single()
-
-        if (userError) {
-          console.error("❌ User lookup error:", userError)
-          console.log("💡 This usually means the user exists in auth.users but not in public.users")
-          setError("User profile not found. Please contact support or check if your account setup is complete.")
-          return
-        }
-
-        console.log("✅ User profile found:", userData)
-
-        if (userData?.role === "super_admin") {
-          console.log("🚀 Redirecting to super admin dashboard")
+      if (data.success && data.user) {
+        // Redirect based on user role
+        if (data.user.role === "super_admin") {
           router.push("/super-admin")
-        } else if (userData?.role === "hotel_owner") {
-          console.log("🚀 Redirecting to hotel admin dashboard")
+        } else if (data.user.role === "hotel_owner") {
           router.push("/hotel-admin")
         } else {
-          console.log("🚀 Redirecting to home page")
           router.push("/")
         }
+
+        // Refresh the page to update auth state
+        router.refresh()
       }
     } catch (err) {
-      console.error("💥 Unexpected error:", err)
+      console.error("Login error:", err)
       setError("An unexpected error occurred")
     } finally {
       setLoading(false)
@@ -153,12 +119,6 @@ export default function LoginForm() {
               {loading ? "Signing in..." : "Sign in"}
             </Button>
           </form>
-
-          <div className="mt-4 text-center">
-            <Link href="/debug/auth-status" className="text-sm text-blue-600 hover:text-blue-500">
-              Debug Authentication Issues
-            </Link>
-          </div>
         </CardContent>
       </Card>
     </div>
