@@ -26,41 +26,69 @@ export default function LoginForm() {
     setError("")
 
     try {
+      console.log("🔐 Attempting login with:", { email, passwordLength: password.length })
+
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       })
 
       if (error) {
-        console.error("Login error:", error)
-        setError(`Login failed: ${error.message}`)
+        console.error("❌ Supabase auth error:", {
+          message: error.message,
+          status: error.status,
+          name: error.name,
+          cause: error.cause,
+        })
+
+        if (error.message === "Invalid login credentials") {
+          setError("Invalid email or password. Please check your credentials and try again.")
+        } else if (error.message.includes("Email not confirmed")) {
+          setError("Please confirm your email address before signing in.")
+        } else {
+          setError(`Login failed: ${error.message}`)
+        }
         return
       }
 
       if (data.user) {
+        console.log("✅ Auth successful, user:", {
+          id: data.user.id,
+          email: data.user.email,
+          emailConfirmed: data.user.email_confirmed_at,
+          lastSignIn: data.user.last_sign_in_at,
+        })
+
         // Get user role to redirect appropriately
+        console.log("🔍 Looking up user role in public.users table...")
         const { data: userData, error: userError } = await supabase
           .from("users")
-          .select("role")
+          .select("role, email, full_name")
           .eq("id", data.user.id)
           .single()
 
         if (userError) {
-          console.error("User lookup error:", userError)
-          setError("User profile not found. Please contact support.")
+          console.error("❌ User lookup error:", userError)
+          console.log("💡 This usually means the user exists in auth.users but not in public.users")
+          setError("User profile not found. Please contact support or check if your account setup is complete.")
           return
         }
 
+        console.log("✅ User profile found:", userData)
+
         if (userData?.role === "super_admin") {
+          console.log("🚀 Redirecting to super admin dashboard")
           router.push("/super-admin")
         } else if (userData?.role === "hotel_owner") {
+          console.log("🚀 Redirecting to hotel admin dashboard")
           router.push("/hotel-admin")
         } else {
+          console.log("🚀 Redirecting to home page")
           router.push("/")
         }
       }
     } catch (err) {
-      console.error("Unexpected error:", err)
+      console.error("💥 Unexpected error:", err)
       setError("An unexpected error occurred")
     } finally {
       setLoading(false)
@@ -125,6 +153,12 @@ export default function LoginForm() {
               {loading ? "Signing in..." : "Sign in"}
             </Button>
           </form>
+
+          <div className="mt-4 text-center">
+            <Link href="/debug/auth-status" className="text-sm text-blue-600 hover:text-blue-500">
+              Debug Authentication Issues
+            </Link>
+          </div>
         </CardContent>
       </Card>
     </div>
